@@ -43,10 +43,19 @@
                          {:partition (:partition partition)
                           :region    region
                           :dnsSuffix (:dnsSuffix partition)})
+        fips-variant (or (->> result :variants (some #(when (= ["fips"] (:tags %)) %)))
+                         (->> result :variants (some #(when (some #{"fips"} (:tags %)) %)))
+                         (throw (ex-info "No FIPS endpoint found"
+                                         {:result result})))
+        fips-variant (if (or (:hostname fips-variant) (:sslCommonName fips-variant))
+                       fips-variant
+                       ; For some reason we have to explicitly add this for some services,
+                       ; such as secretsmanager.
+                       (assoc fips-variant :hostname "{service}-fips.{region}.{dnsSuffix}"))
         uri-parts {"service"   service-name
                    "region"    region
                    "dnsSuffix" (:dnsSuffix partition)}]
-    (cond-> result
+    (cond-> (merge result fips-variant)
       (:hostname result)
       (update :hostname (partial render-uri uri-parts))
 
