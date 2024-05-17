@@ -3,7 +3,8 @@
 
 (ns ^:skip-wiki cognitect.aws.interceptors
   "Impl, don't call directly."
-  (:require [cognitect.aws.service :as service]
+  (:require [clojure.string :as str]
+            [cognitect.aws.service :as service]
             [cognitect.aws.util :as util]))
 
 (set! *warn-on-reflection* true)
@@ -19,12 +20,31 @@
   See https://github.com/aws/aws-sdk-java-v2/blob/master/services/s3/src/main/java/software/amazon/awssdk/services/s3/internal/handlers/AddContentMd5HeaderInterceptor.java "
   #{:PutObject :UploadPart})
 
+; See https://github.com/aws/aws-sdk-js/blob/4e678fbe5f8f3659391842675c6a59078c4b05f5/lib/services/s3util.js#L273
+(def re-domain #"^[A-Za-z0-9][A-Za-z0-9\.\-]{1,61}[A-Za-z0-9]$")
+
+; See https://github.com/aws/aws-sdk-js/blob/4e678fbe5f8f3659391842675c6a59078c4b05f5/lib/services/s3.js#L514-L524
+(defn virtual-host-compatible-bucket-name? [s]
+  (and (not (str/includes? s "."))
+    (boolean (re-matches re-domain s))))
+
 (defmethod modify-http-request "s3" [service op-map http-request]
-  (if (and (= "md5" (get-in service [:metadata :checksumFormat]))
-           (not (md5-blacklist (:op op-map)))
-           (:body http-request))
-    (update http-request :headers assoc "Content-MD5" (-> http-request :body util/md5 util/base64-encode))
-    http-request))
+  (let [{:keys [Bucket]} (:request op-map)
+        {:keys [headers server-name uri]} http-request
+        localstack? (= "localhost" server-name)
+        vhost (str Bucket "." (when localstack? "s3.") server-name)
+        http-request (if (and (some-> Bucket virtual-host-compatible-bucket-name?)
+                              (str/starts-with? uri (str "/" Bucket "/")))
+                       (assoc http-request
+                              :headers (assoc headers "host" vhost)
+                              :server-name vhost
+                              :uri (subs uri (inc (count Bucket))))
+                       http-request)]
+    (if (and (= "md5" (get-in service [:metadata :checksumFormat]))
+             (not (md5-blacklist (:op op-map)))
+             (:body http-request))
+      (update http-request :headers assoc "Content-MD5" (-> http-request :body util/md5 util/base64-encode))
+      http-request)))
 
 (defmethod modify-http-request "apigatewaymanagementapi" [_service op-map http-request]
   (if (= :PostToConnection (:op op-map))
