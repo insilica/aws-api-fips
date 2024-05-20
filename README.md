@@ -1,6 +1,24 @@
-# aws-api
+# aws-api-fips
 
-aws-api provides programmatic access to AWS services from Clojure programs.
+[aws-api](https://github.com/cognitect-labs/aws-api) forked to preferentially use FIPS endpoints.
+
+Some services have special requirements or limitations:
+- The S3 FIPS endpoints require virtual-host style endpoints. This means they only work with buckets that have DNS-compatible names with no periods.
+- STS, which is used when assuming roles, does not use the FIPS endpoint. You have to manually specify the endpoint when creating the client. You also have to specify a region for `:credentialScope`.
+
+```
+(aws/client
+  {:api :sts
+   :endpoint-override
+   {:credentialScope {:region region}
+    :hostname (str "sts." region ".amazonaws.com")
+    :region region}})
+```
+
+The `cognitect.aws.http.cognitect` namespace emits INFO-level logs whenever it sends a request.
+You can monitor these logs to verify that `server-name` contains "fips".
+
+See [AWS FIPS endpoints](https://aws.amazon.com/compliance/fips/).
 
 ## Docs
 
