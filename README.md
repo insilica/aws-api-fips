@@ -6,6 +6,7 @@ Some services have special requirements or limitations:
 - The S3 FIPS endpoints require virtual-host style endpoints. This means they only work with buckets that have DNS-compatible names with no periods.
 - STS, which is used when assuming roles, does not use the FIPS endpoint. You have to manually specify the endpoint when creating the client. You also have to specify a region for `:credentialScope`.
 
+STS example:
 ```
 (aws/client
   {:api :sts
