@@ -32,7 +32,9 @@
   (let [{:keys [Bucket]} (:request op-map)
         {:keys [headers server-name uri]} http-request
         localstack? (= "localhost" server-name)
-        vhost (str Bucket "." (when localstack? "s3.") server-name)
+        vhost (if localstack?
+                (str Bucket ".s3.localhost.localstack.cloud")
+                (str Bucket "." server-name))
         http-request (if (and (some-> Bucket virtual-host-compatible-bucket-name?)
                               (str/starts-with? uri (str "/" Bucket "/")))
                        (assoc http-request
